@@ -39,8 +39,8 @@ def prior_DC():
     """
     return {
         'theta': RNG.uniform(0.1, 3.0),
-        'b0': RNG.uniform(0.5, 2.0),
-        'k': RNG.uniform(0.1, 3.0),
+        'b0': RNG.uniform(0.1, 2.0),
+        'k': RNG.uniform(3.0, 5.0),
         'mu_ndt': RNG.uniform(0.2, 0.6),
         'sigma_ndt': RNG.uniform(0.06, 0.1),
         'mu_alpah': RNG.uniform(0.1, 1),
@@ -48,7 +48,210 @@ def prior_DC():
         'sigma_cpp': RNG.uniform(0.0, 0.3), 
     }
 
+def prior_DC_without_CPP():
+    """
+    Prior distribution over 8 cognitive parameters.
+    
+    Returns:
+        dict with parameter names as keys, sampled values as values
+    """
+    return {
+        'theta': RNG.uniform(0.1, 3.0),
+        'b0': RNG.uniform(0.1, 2.0),
+        'k': RNG.uniform(3.0, 5.0),
+        'mu_ndt': RNG.uniform(0.2, 0.6),
+        'sigma_ndt': RNG.uniform(0.06, 0.1),
+        'mu_alpah': RNG.uniform(0.1, 1),
+        'sigma_alpha': RNG.uniform(0.0, 0.3),
+    }
 
+
+def prior_DC_simplest_model():
+    """
+    Prior distribution over 8 cognitive parameters.
+    
+    Returns:
+        dict with parameter names as keys, sampled values as values
+    """
+    return {
+        'theta': RNG.uniform(0.1, 3.0),
+        'b0': RNG.uniform(2, 5),
+        'mu_ndt': RNG.uniform(0.2, 0.6),
+        'mu_alpah': RNG.uniform(0.1, 1),
+    }
+
+
+# The simplest model
+def ddm_DC_TwoBoundary_TrialWise_simplest(
+    theta, b0,mu_ndt, mu_alpah,
+    number_of_trials, tta_condition, dt=0.005
+):
+    """
+    DDM simulator that tracks TTA for EACH TRIAL.
+    
+    Key difference from original:
+    - Returns BOTH x and tta_per_trial arrays
+    - tta_per_trial has shape (number_of_trials, 1)
+    - Includes the jitter-adjusted TTA value for each trial
+    
+    This enables trial-wise concatenation: [RT_i, CPP_i, TTA_i]
+    
+    Args:
+        theta: Decision criterion parameter
+        b0: Initial boundary height
+        k: Boundary collapse rate
+        mu_ndt: Mean non-decision time
+        sigma_ndt: SD of non-decision time
+        mu_alpah: Mean drift rate
+        sigma_alpha: SD of drift rate across trials
+        sigma_cpp: SD of CPP measurement noise
+        number_of_trials: Number of trials to simulate
+        tta_condition: Base TTA value for this block
+        dt: Time step for simulation
+    
+    Returns:
+        dict with:
+        - 'x': (number_of_trials, 2) array of [RT, CPP] pairs
+        - 'tta_per_trial': (number_of_trials, 1) array of actual TTA per trial
+    """
+    tta = tta_condition
+    x_all = []
+    tta_all = []  # NEW: Track actual TTA for each trial (with jitter)
+    sigma_ndt = 1
+    sigma_alpha = 1
+    k = 1
+    for _ in range(number_of_trials):
+        # Add per-trial jitter to TTA
+        jitter = np.random.uniform(0.0, 0.1)
+        tta0 = tta + jitter
+        
+        # Store the actual TTA for this trial
+        tta_all.append([tta0])  # Keep as list for later stacking
+        
+        # Initialize evidence accumulation
+        evidence = 0.0
+        t = 0.0
+        
+        # Sample trial-specific drift rate
+        alpha_trial = mu_alpah + sigma_alpha * np.random.normal()
+        
+        # Evidence accumulation with collapsing boundary
+        # Boundary depends on TTA
+        while np.abs(evidence) < b0 * (1 / (1 + np.exp(-k * (tta0 - t - 0.5 * b0)))):
+            evidence += alpha_trial * (tta0 - t - theta) * dt + np.sqrt(dt) * np.random.normal()
+            t += dt
+        
+        # Add non-decision time (ensure non-negative)
+        nt = np.random.normal(mu_ndt, sigma_ndt)
+        while nt < 0:
+            nt = np.random.normal(mu_ndt, sigma_ndt)
+        
+        
+        # Determine response time
+        if evidence<0:
+            choicert = - 1 # Did not cross before car arrival
+        else:
+            choicert = t + nt   # Cross-before decision
+        
+        
+        x_all.append([choicert])
+    
+    x = np.stack(x_all)
+    tta_per_trial = np.stack(tta_all)  # NEW: (number_of_trials, 1) array
+    
+    return dict(
+        x=x,                           # (number_of_trials, 2)
+        tta_per_trial=tta_per_trial    # (number_of_trials, 1) NEW!
+    )
+
+# The simplest model tta collective simulation
+def ddm_DC_TwoBoundary_simplest(
+    theta, b0,mu_ndt, mu_alpah,
+    number_of_trials, dt=0.005
+):
+    """
+    DDM simulator that tracks TTA for EACH TRIAL.
+    
+    Key difference from original:
+    - Returns BOTH x and tta_per_trial arrays
+    - tta_per_trial has shape (number_of_trials, 1)
+    - Includes the jitter-adjusted TTA value for each trial
+    
+    This enables trial-wise concatenation: [RT_i, CPP_i, TTA_i]
+    
+    Args:
+        theta: Decision criterion parameter
+        b0: Initial boundary height
+        k: Boundary collapse rate
+        mu_ndt: Mean non-decision time
+        sigma_ndt: SD of non-decision time
+        mu_alpah: Mean drift rate
+        sigma_alpha: SD of drift rate across trials
+        sigma_cpp: SD of CPP measurement noise
+        number_of_trials: Number of trials to simulate
+        tta_condition: Base TTA value for this block
+        dt: Time step for simulation
+    
+    Returns:
+        dict with:
+        - 'x': (number_of_trials, 2) array of [RT, CPP] pairs
+        - 'tta_per_trial': (number_of_trials, 1) array of actual TTA per trial
+    """
+
+    # tta_all = []  # NEW: Track actual TTA for each trial (with jitter)
+    sigma_ndt = 1
+    sigma_alpha = 1
+    k = 1
+    ttas = np.array([2.5, 3.0, 3.5, 4.0])
+    x = np.zeros((len(ttas),number_of_trials))
+    for index,tta in enumerate(ttas):
+        x_all = []
+        for _ in range(number_of_trials):
+            # Add per-trial jitter to TTA
+            jitter = np.random.uniform(0.0, 0.1)
+            tta0 = tta + jitter
+            
+            # # Store the actual TTA for this trial
+            # tta_all.append([tta0])  # Keep as list for later stacking
+            
+            # Initialize evidence accumulation
+            evidence = 0.0
+            t = 0.0
+            
+            # Sample trial-specific drift rate
+            alpha_trial = mu_alpah + sigma_alpha * np.random.normal()
+            
+            # Evidence accumulation with collapsing boundary
+            # Boundary depends on TTA
+            while np.abs(evidence) < b0 * (1 / (1 + np.exp(-k * (tta0 - t - 0.5 * b0)))):
+                evidence += alpha_trial * (tta0 - t - theta) * dt + np.sqrt(dt) * np.random.normal()
+                t += dt
+            
+            # Add non-decision time (ensure non-negative)
+            nt = np.random.normal(mu_ndt, sigma_ndt)
+            while nt < 0:
+                nt = np.random.normal(mu_ndt, sigma_ndt)
+            
+            
+            # Determine response time
+            if evidence<0:
+                choicert = - 1 # Did not cross before car arrival
+            else:
+                choicert = t + nt   # Cross-before decision
+            
+            
+            x_all.append(choicert)
+
+        x[index] = np.array(x_all)
+    
+    # x = np.stack(x_all)
+    # tta_per_trial = np.stack(tta_all)  # NEW: (number_of_trials, 1) array
+    
+    return dict(
+        x=x,                           # (number_of_trials, 2)
+    )
+
+# output -t in case of not deciding to pass
 def ddm_DC_TwoBoundary_TrialWise(
     theta, b0, k, mu_ndt, sigma_ndt, mu_alpah, sigma_alpha,
     number_of_trials, tta_condition, dt=0.005
@@ -128,6 +331,170 @@ def ddm_DC_TwoBoundary_TrialWise(
         x=x,                           # (number_of_trials, 2)
         tta_per_trial=tta_per_trial    # (number_of_trials, 1) NEW!
     )
+
+# output -1 in case of not deciding to pass
+def ddm_DC_TwoBoundary_TrialWise1(
+    theta, b0, k, mu_ndt, sigma_ndt, mu_alpah, sigma_alpha,
+    number_of_trials, tta_condition, dt=0.005
+):
+    """
+    DDM simulator that tracks TTA for EACH TRIAL.
+    
+    Key difference from original:
+    - Returns BOTH x and tta_per_trial arrays
+    - tta_per_trial has shape (number_of_trials, 1)
+    - Includes the jitter-adjusted TTA value for each trial
+    
+    This enables trial-wise concatenation: [RT_i, CPP_i, TTA_i]
+    
+    Args:
+        theta: Decision criterion parameter
+        b0: Initial boundary height
+        k: Boundary collapse rate
+        mu_ndt: Mean non-decision time
+        sigma_ndt: SD of non-decision time
+        mu_alpah: Mean drift rate
+        sigma_alpha: SD of drift rate across trials
+        sigma_cpp: SD of CPP measurement noise
+        number_of_trials: Number of trials to simulate
+        tta_condition: Base TTA value for this block
+        dt: Time step for simulation
+    
+    Returns:
+        dict with:
+        - 'x': (number_of_trials, 2) array of [RT, CPP] pairs
+        - 'tta_per_trial': (number_of_trials, 1) array of actual TTA per trial
+    """
+    tta = tta_condition
+    x_all = []
+    tta_all = []  # NEW: Track actual TTA for each trial (with jitter)
+    
+    for _ in range(number_of_trials):
+        # Add per-trial jitter to TTA
+        jitter = np.random.uniform(0.0, 0.1)
+        tta0 = tta + jitter
+        
+        # Store the actual TTA for this trial
+        tta_all.append([tta0])  # Keep as list for later stacking
+        
+        # Initialize evidence accumulation
+        evidence = 0.0
+        t = 0.0
+        
+        # Sample trial-specific drift rate
+        alpha_trial = mu_alpah + sigma_alpha * np.random.normal()
+        
+        # Evidence accumulation with collapsing boundary
+        # Boundary depends on TTA
+        while np.abs(evidence) < b0 * (1 / (1 + np.exp(-k * (tta0 - t - 0.5 * b0)))):
+            evidence += alpha_trial * (tta0 - t - theta) * dt + np.sqrt(dt) * np.random.normal()
+            t += dt
+        
+        # Add non-decision time (ensure non-negative)
+        nt = np.random.normal(mu_ndt, sigma_ndt)
+        while nt < 0:
+            nt = np.random.normal(mu_ndt, sigma_ndt)
+        
+        
+        # Determine response time
+        if evidence<0:
+            choicert = - 1 # Did not cross before car arrival
+        else:
+            choicert = t + nt   # Cross-before decision
+        
+        
+        x_all.append([choicert])
+    
+    x = np.stack(x_all)
+    tta_per_trial = np.stack(tta_all)  # NEW: (number_of_trials, 1) array
+    
+    return dict(
+        x=x,                           # (number_of_trials, 2)
+        tta_per_trial=tta_per_trial    # (number_of_trials, 1) NEW!
+    )
+
+
+# one boundary simulation 
+def ddm_DC_OneBoundary_TrialWise(
+    theta, b0, k, mu_ndt, sigma_ndt, mu_alpah, sigma_alpha,
+    number_of_trials, tta_condition, dt=0.005
+):
+    """
+    DDM simulator that tracks TTA for EACH TRIAL.
+    
+    Key difference from original:
+    - Returns BOTH x and tta_per_trial arrays
+    - tta_per_trial has shape (number_of_trials, 1)
+    - Includes the jitter-adjusted TTA value for each trial
+    
+    This enables trial-wise concatenation: [RT_i, CPP_i, TTA_i]
+    
+    Args:
+        theta: Decision criterion parameter
+        b0: Initial boundary height
+        k: Boundary collapse rate
+        mu_ndt: Mean non-decision time
+        sigma_ndt: SD of non-decision time
+        mu_alpah: Mean drift rate
+        sigma_alpha: SD of drift rate across trials
+        sigma_cpp: SD of CPP measurement noise
+        number_of_trials: Number of trials to simulate
+        tta_condition: Base TTA value for this block
+        dt: Time step for simulation
+    
+    Returns:
+        dict with:
+        - 'x': (number_of_trials, 2) array of [RT, CPP] pairs
+        - 'tta_per_trial': (number_of_trials, 1) array of actual TTA per trial
+    """
+    tta = tta_condition
+    x_all = []
+    tta_all = []  # NEW: Track actual TTA for each trial (with jitter)
+    
+    for _ in range(number_of_trials):
+        # Add per-trial jitter to TTA
+        jitter = np.random.uniform(0.0, 0.1)
+        tta0 = tta + jitter
+        
+        # Store the actual TTA for this trial
+        tta_all.append([tta0])  # Keep as list for later stacking
+        
+        # Initialize evidence accumulation
+        evidence = 0.0
+        t = 0.0
+        
+        # Sample trial-specific drift rate
+        alpha_trial = mu_alpah + sigma_alpha * np.random.normal()
+        
+        # Evidence accumulation with collapsing boundary
+        # Boundary depends on TTA
+        while evidence < b0 * (1 / (1 + np.exp(-k * (tta0 - t - 0.5 * b0)))) and t<=tta0:
+            evidence += alpha_trial * (tta0 - t - theta) * dt + np.sqrt(dt) * np.random.normal()
+            t += dt
+        
+        # Add non-decision time (ensure non-negative)
+        nt = np.random.normal(mu_ndt, sigma_ndt)
+        while nt < 0:
+            nt = np.random.normal(mu_ndt, sigma_ndt)
+        
+        
+        # Determine response time
+        if t>tta0:
+            choicert = - 1 # Did not cross before car arrival
+        else:
+            choicert = t + nt   # Cross-before decision
+        
+        
+        x_all.append([choicert])
+    
+    x = np.stack(x_all)
+    tta_per_trial = np.stack(tta_all)  # NEW: (number_of_trials, 1) array
+    
+    return dict(
+        x=x,                           # (number_of_trials, 2)
+        tta_per_trial=tta_per_trial    # (number_of_trials, 1) NEW!
+    )
+
 
 def ddm_DC_alphaToCpp_TrialWise(
     theta, b0, k, mu_ndt, sigma_ndt, mu_alpah, sigma_alpha, sigma_cpp,
@@ -226,7 +593,37 @@ def meta():
         "tta_condition": tta_flag,
     }
 
+def meta1():
+    """
+    Meta-function generates simulation context.
+    
+    Randomly selects ONE TTA condition per simulation.
+    This gets passed to simulator, which generates data for that block
+    and also returns the actual TTA values for each trial (with jitter).
+    """
+    return {
+        "number_of_trials": 60,
+    }
 
+
+
+## Adapt Not Trial Wise tta
+def adopt(p):
+    adapter = (
+        bf.Adapter()
+        .broadcast("number_of_trials", to="x")  # Align trial count with data
+        .as_set("x")  # Treat trials as exchangeable (permits variable length)
+        .standardize("x",mean=0.0, std=1.0)  # Normalize data
+        .sqrt("number_of_trials")  # Feature engineering
+        .convert_dtype("float64", "float32")
+    # PyTorch compatibility
+        .concatenate(list(p.keys()), into="inference_variables")
+        .rename("x", "summary_variables")  # Rename data to "summary_variables" [[3]]
+    )
+    return adapter
+
+
+## Adapt Trial Wise tta
 def adopt_TrialWise(p):
     """
     Adapter for TRIAL-WISE concatenation approach.
@@ -334,21 +731,40 @@ def adopt_TrialWise_Alternative(p):
 # MODEL CREATION
 # ============================================================================
 
+
+# trial wise
+# # Create the simulator with trial-wise TTA tracking
+# model_DC_TrialWise = bf.simulators.make_simulator(
+#     [prior_DC_simplest_model,ddm_DC_TwoBoundary_TrialWise_simplest],
+#     meta_fn=meta,
+# )
+
+# # Create the adapter for trial-wise concatenation
+# def get_adapter():
+#     return adopt_TrialWise(prior_DC_simplest_model())
+
+# # For use with training scripts
+# all_models = {
+#     'model_DC_TwoBoundary_TrialWise_Simplest': [model_DC_TrialWise, get_adapter()]
+# }
+
+
+# Not Trial Wise
+
 # Create the simulator with trial-wise TTA tracking
 model_DC_TrialWise = bf.simulators.make_simulator(
-    [prior_DC, ddm_DC_TwoBoundary_TrialWise],
-    meta_fn=meta,
+    [prior_DC_simplest_model,ddm_DC_TwoBoundary_simplest],
+    meta_fn=meta1,
 )
 
 # Create the adapter for trial-wise concatenation
 def get_adapter():
-    return adopt_TrialWise(prior_DC())
+    return adopt(prior_DC_simplest_model())
 
 # For use with training scripts
 all_models = {
-    'model_DC_TrialWise': [model_DC_TrialWise, get_adapter()]
+    'model_DC_TwoBoundary_Simplest': [model_DC_TrialWise, get_adapter()]
 }
-
 
 # ============================================================================
 # UTILITY: Data shape information for debugging

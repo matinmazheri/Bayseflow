@@ -12,3 +12,7 @@ real_data/
 
 # Specific Large Files
 *.pdf
+
+
+# ignore codex files
+.codex

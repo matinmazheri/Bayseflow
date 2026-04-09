@@ -37,13 +37,14 @@ CONFIG = {
     "device": torch.device('cuda' if torch.cuda.is_available() else 'cpu'),
     "training": {
         "n_sim": 100,          # Simulations per epoch
-        "epochs": 1,          # Total epochs to train
+        "epochs": 10,          # Total epochs to train
         "batch_size": 32,
-        "resume_epochs": 2,    # Additional epochs when resuming
+        "resume_epochs": 3,    # Additional epochs when resuming
     },
     "recovery": {
         "n_test_sims": 50,    # Simulations for recovery evaluation
-        "n_posterior_samples": 50  # MCMC samples for posterior
+        "n_posterior_samples": 50,  # MCMC samples for posterior
+        "mode": "visualize" # visualize | save_only
     },
     "paths": {
         "checkpoints": "trained_model1/checkpoints",
