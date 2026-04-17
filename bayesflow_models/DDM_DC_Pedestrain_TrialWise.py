@@ -21,6 +21,11 @@ Author: Bayesian Inference Pipeline
 Version: 1.0 (Specification-Compliant)
 """
 
+import logging
+
+# Tell the bayesflow logger to ignore warnings and info messages
+logging.getLogger("bayesflow").setLevel(logging.ERROR)
+
 import numpy as np
 import bayesflow as bf
 
@@ -28,6 +33,8 @@ RNG = np.random.default_rng(2023)
 
 # Discrete time-to-arrival (TTA) flags used in the experiment.
 CONDITIONS = np.array([2.5, 3.0, 3.5, 4.0])
+
+PAR_NAMES = ['theta','b0','mu_ndt','mu_alpha']
 
 
 def prior_DC():
@@ -752,14 +759,22 @@ def adopt_TrialWise_Alternative(p):
 # Not Trial Wise
 
 # Create the simulator with trial-wise TTA tracking
-model_DC_TrialWise = bf.simulators.make_simulator(
+model_DC = bf.simulators.make_simulator(
     [prior_DC_simplest_model,ddm_DC_TwoBoundary_simplest],
     meta_fn=meta1,
+)
+
+model_DC_TrialWise = bf.simulators.make_simulator(
+    [prior_DC_simplest_model, ddm_DC_TwoBoundary_TrialWise_simplest],
+    meta_fn=meta,
 )
 
 # Create the adapter for trial-wise concatenation
 def get_adapter():
     return adopt(prior_DC_simplest_model())
+
+def get_adapter_trialwise():
+    return adopt_TrialWise(prior_DC_simplest_model())
 
 # For use with training scripts
 all_models = {

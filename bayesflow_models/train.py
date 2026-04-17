@@ -1,5 +1,8 @@
 import os
+import warnings
+warnings.filterwarnings("ignore", message="When using torch backend")
 
+import bayesflow
 os.environ.setdefault("KERAS_BACKEND", "torch")
 
 import keras
@@ -12,7 +15,7 @@ from scipy import stats
 from time import time
 import matplotlib.pyplot as plt
 import random
-
+from pathlib import Path
 
 
 
@@ -222,7 +225,8 @@ def train_amortizer_resume(
     epochs: int = 10,      # how many *additional* epochs to run
     batch_size: int = 32,
     initial_lr: float = 5e-4,
-    checkpoint_dir: str = "trained_model/checkpoints"
+    checkpoint_dir: str = "trained_model/checkpoints",
+    checkpoint_save: str = None,
 ):
     """
     1) Looks for `<checkpoint_dir>/<model_name>.keras`.  
@@ -233,19 +237,21 @@ def train_amortizer_resume(
     3) Assigns `workflow.approximator = loaded_amortizer` before calling fit_online.  
     4) Runs another `epochs` of `fit_online(...)`, then re‐saves into the same `<model_name>.keras` path.
     """
-
+    
     simulator, adapter = model
-    checkpoint_save = os.path.join(checkpoint_dir, model_name + ".keras")
+    checkpoint_load = os.path.join(checkpoint_dir, model_name + ".keras")
+    if checkpoint_save == None:
+        checkpoint_save = checkpoint_load
 
     # Step 2: Build a brand‐new BasicWorkflow, but inject our optimizer (loaded or freshly created)
     summary_net   = bf.networks.SetTransformer(summary_dim=10)
     inference_net = bf.networks.CouplingFlow()
 
     # Step 1: Try to load existing amortizer (weights + optimizer state)
-    if os.path.exists(checkpoint_save):
-        print(f"▶️ Loading existing amortizer from:\n   {checkpoint_save}")
+    if os.path.exists(checkpoint_load):
+        print(f"▶️ Loading existing amortizer from:\n   {checkpoint_load}")
         loaded_amortizer = keras.models.load_model(
-            checkpoint_save,
+            checkpoint_load,
             custom_objects={
                 # BayesFlow’s custom layers/networks:
                 "SetTransformer": bf.networks.SetTransformer,
@@ -274,7 +280,7 @@ def train_amortizer_resume(
         checkpoint_filepath=None
         )
     else:
-        print(f"⚠️ No checkpoint found at '{checkpoint_save}'.  Starting from scratch.")
+        print(f"⚠️ No checkpoint found at '{checkpoint_load}'.  Starting from scratch.")
         # Fall back to exactly the same steps as train_amortizer_from_scratch
         loaded_amortizer = None
         # loaded_optimizer = keras.optimizers.Adam(learning_rate=initial_lr)
@@ -302,7 +308,8 @@ def train_amortizer_resume(
     )
 
     # Step 4: Re‐save the updated amortizer (now with new weights + updated optimizer state)
-    os.makedirs(checkpoint_dir, exist_ok=True)
+    # os.makedirs(checkpoint_dir, exist_ok=True)
+    Path(checkpoint_save).parent.mkdir(parents=True, exist_ok=True)
     workflow.approximator.save(filepath=checkpoint_save)
     print(f"✅  Saved updated amortizer (weights + optimizer) at:\n   {checkpoint_save}")
 

@@ -33,7 +33,7 @@ from bayesflow_models.utils_real_data import *  # Assuming utils_real_data has s
 # CONFIGURATION
 # ============================================================================
 
-CONFIG = {
+DEFAULT_CONFIG = {
     "device": torch.device('cuda' if torch.cuda.is_available() else 'cpu'),
     "training": {
         "n_sim": 100,          # Simulations per epoch
@@ -53,14 +53,15 @@ CONFIG = {
         "logs": "logs"
     }
 }
-
+# CONFIG = DEFAULT_CONFIG
 # ============================================================================
 # UTILITY FUNCTIONS
 # ============================================================================
 
-def setup_directories():
+def setup_directories(config: dict):
     """Ensure all required directories exist"""
-    for key, path in CONFIG["paths"].items():
+    assert config["paths"] != None
+    for key, path in config["paths"].items():
         Path(path).mkdir(parents=True, exist_ok=True)
     print("✓ Directories setup complete")
 
@@ -78,7 +79,7 @@ def log_info(message, phase="INFO"):
     print(log_msg)
     
     # Save to log file (create directory if needed)
-    log_dir = CONFIG["paths"]["logs"]
+    # log_dir = CONFIG["paths"]["logs"]
     Path(log_dir).mkdir(parents=True, exist_ok=True)
     log_file = os.path.join(log_dir, "workflow.log")
     with open(log_file, "a") as f:
@@ -100,8 +101,9 @@ def train_single_model(model_name, config=None, resume=False):
     Returns:
         history: Training history
     """
-    if config is None:
-        config = CONFIG["training"]
+    # if config is None:
+    #     config = CONFIG["training"]
+    
     
     if model_name not in all_models:
         raise ValueError(f"Model '{model_name}' not found. Available: {list(all_models.keys())}")
@@ -120,7 +122,7 @@ def train_single_model(model_name, config=None, resume=False):
         epochs=epochs,
         batch_size=config["batch_size"],
         initial_lr=5e-4,
-        checkpoint_dir=CONFIG["paths"]["checkpoints"]
+        checkpoint_dir=config["paths"]["checkpoints"]
     )
     
     elapsed = time() - start_time
@@ -139,8 +141,8 @@ def train_all_models(config=None, resume_existing=True):
     Returns:
         histories: Dict of model_name -> history
     """
-    if config is None:
-        config = CONFIG["training"]
+    # if config is None:
+    #     config = CONFIG["training"]
     
     histories = {}
     model_names = list(all_models.keys())
@@ -148,7 +150,7 @@ def train_all_models(config=None, resume_existing=True):
     log_info(f"Training {len(model_names)} models", "TRAINING")
     
     for model_name in model_names:
-        checkpoint_path = os.path.join(CONFIG["paths"]["checkpoints"], f"{model_name}.keras")
+        checkpoint_path = os.path.join(config["paths"]["checkpoints"], f"{model_name}.keras")
         resume = resume_existing and os.path.exists(checkpoint_path)
         
         try:
@@ -224,8 +226,8 @@ def run_recovery_analysis(model_name, n_test=None):
     Returns:
         results: Dict with recovery metrics
     """
-    if n_test is None:
-        n_test = CONFIG["recovery"]["n_test_sims"]
+    # if n_test is None:
+    #     n_test = CONFIG["recovery"]["n_test_sims"]
     
     log_info(f"Running recovery analysis for {model_name} ({n_test} sims)", "RECOVERY")
     
@@ -355,8 +357,8 @@ def infer_subject_parameters(subject_data, model_name, n_samples=None):
     Returns:
         result: Dict with inferred parameters and statistics
     """
-    if n_samples is None:
-        n_samples = CONFIG["recovery"]["n_posterior_samples"]
+    # if n_samples is None:
+    #     n_samples = CONFIG["recovery"]["n_posterior_samples"]
     
     log_info(f"Inferring parameters for subject with model {model_name}", "INFERENCE")
     

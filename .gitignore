@@ -16,3 +16,9 @@ real_data/
 
 # ignore codex files
 .codex
+
+*.keras
+
+*.json
+
+*.txt
