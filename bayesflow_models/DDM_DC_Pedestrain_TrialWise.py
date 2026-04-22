@@ -167,7 +167,7 @@ def ddm_DC_TwoBoundary_TrialWise_simplest(
     tta_per_trial = np.stack(tta_all)  # NEW: (number_of_trials, 1) array
     
     return dict(
-        x=x,                           # (number_of_trials, 2)
+        x=x,                           # (number_of_trials, 1)
         tta_per_trial=tta_per_trial    # (number_of_trials, 1) NEW!
     )
 

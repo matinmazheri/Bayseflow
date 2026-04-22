@@ -71,10 +71,17 @@ def build_runtime_config(args):
         config["training"]["resume_epochs"] = args.epochs
         config["training"]["batch_size"] = args.batch_size
 
-    if args.command == "recovery":
+    if args.command in {"recovery", "mixed-recovery"}:
         config["recovery"]["n_test_sims"] = args.n_test_sims
         config["recovery"]["n_posterior_samples"] = args.n_posterior_samples
-        config["recovery"]["mode"] = args.mode
+        if hasattr(args, "mode"):
+            config["recovery"]["mode"] = args.mode
+        if hasattr(args, "trials_per_tta"):
+            config["recovery"]["trials_per_tta"] = args.trials_per_tta
+        if hasattr(args, "shuffle_tta"):
+            config["recovery"]["shuffle_tta"] = args.shuffle_tta
+        if hasattr(args, "seed"):
+            config["recovery"]["seed"] = args.seed
     
     return config
 
@@ -224,6 +231,19 @@ def build_parser():
     recovery_parser.add_argument("--n-posterior-samples", type=int, default=50)
     recovery_parser.add_argument("--mode", choices=["save_only", "visualize"], default="save_only")
 
+    mixed_recovery_parser = subparsers.add_parser(
+        "mixed-recovery",
+        help="Stress-test a trained artifact on synthetic mixed-TTA trial sequences.",
+    )
+    mixed_recovery_parser.add_argument("--artifacts", nargs="+", required=True)
+    mixed_recovery_parser.add_argument("--n-test-sims", type=int, default=100)
+    mixed_recovery_parser.add_argument("--n-posterior-samples", type=int, default=1000)
+    mixed_recovery_parser.add_argument("--trials-per-tta", type=int, default=15)
+    mixed_recovery_parser.add_argument("--no-shuffle-tta", dest="shuffle_tta", action="store_false")
+    mixed_recovery_parser.set_defaults(shuffle_tta=True)
+    mixed_recovery_parser.add_argument("--seed", type=int, default=2026)
+    mixed_recovery_parser.add_argument("--mode", choices=["save_only", "visualize"], default="save_only")
+
     return parser
 
 
@@ -293,6 +313,31 @@ def main():
                 raise ValueError(f"workflow {spec.workflow} has not found in detected workflows")
             workflow = workflows[spec.workflow]
             workflow.recovery_fn(spec, config_added_alia)
+
+      if args.command == "mixed-recovery":
+        from bayesflow_models.mixed_tta_evaluation import evaluate_mixed_tta_artifact_with_bf_recovery
+
+        for ref in args.artifacts:
+            metadata = wf.resolve_artifact_ref(ref, config)
+            spec_name = metadata["spec_name"]
+            if spec_name not in specs.keys():
+                raise ValueError(f"Model {spec_name} has not found in detected models")
+
+            spec = specs[spec_name]
+            config["mode"] = args.mode
+            report = evaluate_mixed_tta_artifact_with_bf_recovery(
+                artifact_ref=ref,
+                spec=spec,
+                config=config,
+                n_test_sims=args.n_test_sims,
+                n_posterior_samples=args.n_posterior_samples,
+                trials_per_tta=args.trials_per_tta,
+                shuffle_tta=args.shuffle_tta,
+                seed=args.seed,
+            )
+            print(f"Mixed-TTA recovery for {report['artifact_id']}")
+
+
            
 
    

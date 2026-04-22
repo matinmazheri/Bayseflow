@@ -409,7 +409,7 @@ def recovery_from_artifact(spec: ModelSpec, config: dict) -> WorkflowResult:
 
 
     # Simulate validation data (unseen during training)
-    val_sims = simulator.sample( config["recovery"]["n_test_sims"])
+    val_sims = simulator.sample(config["recovery"]["n_test_sims"])
 
     post_draws1 = approximator.sample(conditions=val_sims, num_samples=config["recovery"]["n_posterior_samples"])
     par_names = spec.par_names
