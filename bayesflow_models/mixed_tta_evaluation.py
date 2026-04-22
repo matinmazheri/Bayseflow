@@ -7,6 +7,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 
 from bayesflow_models import workflow as wf
+# I have to add condition to the models 
 from bayesflow_models.DDM_DC_Pedestrain_TrialWise import (
     CONDITIONS,
 )
@@ -108,8 +109,9 @@ def generate_mixed_tta_validation_data(
         "tta_per_trial": np.asarray(tta_batch, dtype=np.float32),
         "number_of_trials": np.full((n_test_sims,), n_trials, dtype=np.float32),
     }
+
     true_params = {
-        name: np.asarray(values, dtype=np.float32)
+        name: np.expand_dims(np.asarray(values, dtype=np.float32),axis=-1)
         for name, values in params_batch.items()
     }
 
@@ -277,12 +279,12 @@ def evaluate_mixed_tta_artifact_with_bf_recovery(
         shuffle_tta=shuffle_tta,
         seed=seed,
     )
-    
+    val_sims.update(true_params)
     posterior = approximator.sample(
         conditions=val_sims,
         num_samples=n_posterior_samples,
     )
-    val_sims.update(true_params)
+    
 
     f = recovery(
         estimates=posterior,
